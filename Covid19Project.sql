@@ -7,7 +7,7 @@ WHERE continent is not null
 
 --CovidVaccinations datasets
 SELECT  * FROM CovidVaccinations
-WHERE continent HELLO
+WHERE continent is not null
 
 -- The number of rows of the dataset
 SELECT COUNT(*) FROM CovidDeaths
