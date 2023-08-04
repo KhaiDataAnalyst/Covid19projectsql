@@ -7,15 +7,15 @@ WHERE continent is not null
 
 --CovidVaccinations datasets
 SELECT  * FROM CovidVaccinations
-WHERE continent is not null
+WHERE continent is not null 
 
 -- The number of rows of the dataset
 SELECT COUNT(*) FROM CovidDeaths
 
 -- Years when we do the survey
--- From the result, we can see that this survey is conducted in two years 2020 and 2021
 SELECT DISTINCT(YEAR(date)) AS Year FROM CovidDeaths
 SELECT DISTINCT(YEAR(date)) AS Year FROM CovidVaccinations
+-- From the result, we can see that this survey is conducted in two years 2020 and 2021
 
 --The global number 
 SELECT location,max(total_cases) as total_cases,max(total_deaths) as total_death
@@ -30,9 +30,9 @@ FROM  CovidDeaths
 WHERE location='World'
 GROUP BY location
 
--- Find out the death_rate of each continent over the period
-SELECT continent,sum(new_cases) as total_cases,sum(new_deaths) as total_deaths
---cast(sum(new_deaths) as float)/cast(sum(new_cases) as float)*100 as death_rate
+-- Find out the death_rate of each continent
+SELECT continent,sum(new_cases) as total_cases,sum(new_deaths) as total_deaths,
+ROUND(cast(sum(new_deaths) as float)/nullif(cast(sum(new_cases) as float)*100,0),5) as death_rate
 FROM CovidDeaths
 WHERE continent IS NOT NULL
 GROUP BY continent
@@ -52,11 +52,11 @@ FROM CovidDeaths
 where continent is not null 
 ORDER BY gdp_per_capita desc
 
---Find  out the Dthe number death of each location over the period of time 
+--Find out the number death of each location over the period of time 
 SELECT location,date,sum(new_deaths) over(partition by date) AS number_of_deaths
 FROM CovidDeaths
 WHERE continent is not NULL
-OR BY 2
+ORDER BY date
 
 -- Find out the top 10 with the highest total deaths in 2020
 SELECT top 10 location,MAX(total_deaths) as TotalDeaths FROM CovidDeaths 
@@ -70,40 +70,31 @@ WHERE continent is not null AND YEAR(date)=2021
 GROUP BY location
 ORDER BY TotalDeaths DESC
 
---Union two years
-SELECT location, TotalDeaths, Year
-FROM (
-    SELECT location, MAX(total_deaths) as TotalDeaths, YEAR(date) as Year,
-           ROW_NUMBER() OVER (ORDER BY MAX(total_deaths) DESC) as rn
-    FROM CovidDeaths
-    WHERE continent IS NOT NULL AND YEAR(date) = 2020
-    GROUP BY location, YEAR(date)
-) AS temp
-WHERE rn <= 10
+--Union two years above
+SELECT location,total_deaths,year from(
+SELECT top 10 location,max(total_deaths) as total_deaths,year(date) as year from CovidDeaths
+WHERE continent is not null and year(date)=2020
+GROUP BY location,year(date) 
+ORDER BY max(total_deaths) DESC) as table1
 UNION ALL
-SELECT location, TotalDeaths, Year
-FROM (
-    SELECT location, MAX(total_deaths) as TotalDeaths, YEAR(date) as Year,
-           ROW_NUMBER() OVER (ORDER BY MAX(total_deaths) DESC) as rn
-    FROM CovidDeaths
-    WHERE continent IS NOT NULL AND YEAR(date) = 2021
-    GROUP BY location, YEAR(date)
-) AS temp2
-WHERE rn <= 10
-ORDER BY [Year]
-
-
-
--- Break down the death_rate in each location
-SELECT location,max(total_deaths) as total_death,max(total_cases) as total_cases,
-(cast(max(total_deaths) as float)/cast(max(total_cases) as float))*100 as death_rate
-FROM CovidDeaths
-WHERE continent is not null 
-GROUP BY location
-ORDER BY death_rate
+SELECT location,total_deaths,year from(
+SELECT top 10 location,max(total_deaths) as total_deaths,year(date) as year from CovidDeaths
+WHERE continent is not null and year(date)=2021
+GROUP BY location,year(date)
+ORDER BY max(total_deaths) DESC) as table2
+ORDER BY year
+ 
+-- Break down the death_rate and vaccination_rate in each location
+SELECT dea.location,ROUND(cast(max(dea.total_deaths) as float)/nullif(cast(max(dea.total_cases) as float),0),5) as death_rate,
+round(cast(max(vac.people_vaccinated) as float)/nullif(cast(max(dea.population) as float),0),5) as vaccination_rate
+FROM CovidDeaths as dea
+JOIN CovidVaccinations as vac
+ON dea.iso_code=vac.iso_code AND dea.date=vac.date
+WHERE dea.continent is not null
+GROUP BY dea.location
 
 -- Countries with Highest Infection Rate compared to Population
-SELECT location,population,round(cast(max(total_cases) as float)/cast(population as float)*100,2) as infection_rate
+SELECT location,population,round(cast(max(total_cases) as float)/nullif(cast(population as float),0)*100,5) as infection_rate
 FROM CovidDeaths
 WHERE continent is not null
 GROUP BY location,population 
@@ -111,13 +102,12 @@ ORDER BY infection_rate desc
 
 
 -- Find out the country that has the highest total_vaccination in each continent
+-- Use row_number() when you want to find out the highest/lowest component in each divided group
 SELECT location,continent,total_vaccinations FROM(
-SELECT location,continent,total_vaccinations,ROW_NUMBER() OVER (PARTITION BY continent ORDER BY total_vaccinationS DESC) position
+SELECT location,continent,total_vaccinations,ROW_NUMBER() OVER (PARTITION BY continent ORDER BY total_vaccinations DESC) as position
 FROM CovidVaccinations
-WHERE continent IS NOT NULL) total_vac
+WHERE continent IS NOT NULL) as total_vac
 WHERE position=1
-
-
 
 
 -- Join the two table, extract necessary information
@@ -132,7 +122,7 @@ AND death.date=vaccine.date
 WHERE death.continent is not null 
 
 --Create View for later visualization, show the data for each country
-Create View fully_vaccinated  As
+Create View fully_vaccinated As
 With CTE as(
 SELECT death.continent, death.location,death.population,
 max(death.people_fully_vaccinated) over (partition by vaccine.location) as total_fully_vaccinated,
@@ -160,7 +150,6 @@ WHERE total_fully_vaccinated IS NOT NULL
 -- Delete the table
 DROP TABLE IF EXISTS vaccination
 
-Select * from CovidDeaths
 
 
 
